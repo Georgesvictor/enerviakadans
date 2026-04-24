@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 40" width="200" height="40">
+  <rect width="200" height="40" fill="transparent"/>
+  <g transform="translate(4,4)">
+    <path d="M0 16 L6 0 L12 16 L6 32 Z" fill="#1F4D3F"/>
+    <path d="M10 12 L14 4 L18 12 L14 20 Z" fill="#E87722"/>
+  </g>
+  <text x="34" y="26" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="700" fill="#1F4D3F" letter-spacing="2">ENERVIA</text>
+</svg>
