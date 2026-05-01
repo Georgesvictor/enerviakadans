@@ -8,7 +8,7 @@ import { randomUUID } from "crypto";
  * Geldig 30 dagen.
  */
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } },
 ) {
   const { userId } = await auth();
