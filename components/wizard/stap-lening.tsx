@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -12,6 +13,7 @@ import { berekenLening, checkMVLGeschiktheid, COMMERCIEEL_DEFAULT_RENTE } from "
 import { toast } from "@/components/ui/toaster";
 
 export function StapLening({ dossier, onNext }: { dossier: any; onNext: () => void }) {
+  const router = useRouter();
   const params = dossier.parameters?.[0];
   const premies = dossier.premie?.[0];
   const extractie = dossier.extractie?.[0]?.gestructureerde_data;
@@ -58,6 +60,7 @@ export function StapLening({ dossier, onNext }: { dossier: any; onNext: () => vo
         }),
       });
       if (!res.ok) throw new Error(await res.text());
+      router.refresh();
       toast({ title: "Lening opgeslagen", variant: "success" });
       onNext();
     } catch (err) {

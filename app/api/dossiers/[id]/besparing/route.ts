@@ -15,32 +15,48 @@ export async function POST(
 
   const body = (await req.json()) as { eigen_inbreng: number; prijsstijging?: number };
 
-  const { data: dossier } = await supabase
-    .from("dossiers")
-    .select(`
-      id, verkoper_id,
-      extractie:offerte_extracties(gestructureerde_data),
-      parameters:klant_parameters(*)
-    `)
-    .eq("id", params.id)
-    .single();
+  const [dossierRes, extractieRes, paramsRes, premiesRes] = await Promise.all([
+    supabase.from("dossiers").select("id, verkoper_id").eq("id", params.id).single(),
+    supabase
+      .from("offerte_extracties")
+      .select("gestructureerde_data")
+      .eq("dossier_id", params.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("klant_parameters")
+      .select("*")
+      .eq("dossier_id", params.id)
+      .maybeSingle(),
+    supabase
+      .from("premie_simulaties")
+      .select("premies_jsonb")
+      .eq("dossier_id", params.id)
+      .maybeSingle(),
+  ]);
+
+  const dossier = dossierRes.data;
   if (!dossier || dossier.verkoper_id !== userId) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 
-  const extractie = (dossier.extractie as any)?.[0]?.gestructureerde_data as OfferteExtractie;
-  const kparams = (dossier.parameters as any)?.[0] as KlantParameters;
+  const extractie = extractieRes.data?.gestructureerde_data as OfferteExtractie | undefined;
+  const kparams = paramsRes.data as KlantParameters | undefined;
   if (!extractie || !kparams) {
     return NextResponse.json({ error: "extractie/params ontbreken" }, { status: 400 });
   }
 
   const prijzen = await getActueleEnergieprijzen();
+  const premies = premiesRes.data?.premies_jsonb as any;
+
   const besparing = berekenTotaleBesparing({
     extractie,
     parameters: kparams,
     prijzen,
     eigen_inbreng: body.eigen_inbreng,
     jaarlijkse_prijsstijging: body.prijsstijging,
+    premies,
   });
 
   await supabase.from("besparing_simulaties").upsert(
@@ -54,6 +70,14 @@ export async function POST(
       projectie_10j_jsonb: besparing.projectie_10j as any,
       gebruikte_energieprijzen_jsonb: besparing.gebruikte_energieprijzen as any,
       jaarlijkse_prijsstijging: besparing.jaarlijkse_prijsstijging,
+      ingrepen_jsonb: besparing.ingrepen as any,
+      maandelijks_gas_euro: besparing.maandelijkse_besparing_gas_euro,
+      maandelijks_elek_euro: besparing.maandelijkse_besparing_elek_euro,
+      maandelijks_totaal_euro: besparing.maandelijkse_besparing_totaal_euro,
+      co2_reductie_kg_jaar: besparing.co2_reductie_kg_jaar,
+      epc_kwh_m2_voor: besparing.epc_kwh_m2_voor,
+      epc_kwh_m2_na: besparing.epc_kwh_m2_na,
+      epc_label_verwacht: besparing.epc_label_verwacht,
     },
     { onConflict: "dossier_id" },
   );

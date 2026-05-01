@@ -7,10 +7,12 @@ import type {
   BesparingResultaat,
   KlantParameters,
   OfferteExtractie,
+  PremiesOverzicht,
 } from "./types";
 import { berekenWarmtepompBesparing } from "./besparing-warmtepomp";
 import { berekenPVBesparing } from "./besparing-pv";
 import { bouwProjectie10j } from "./projectie-10j";
+import { bouwIngrepen } from "./besparing-per-ingreep";
 
 export interface EnergiePrijzenSnapshot {
   elektriciteit_per_kwh: number;
@@ -19,10 +21,15 @@ export interface EnergiePrijzenSnapshot {
   terugleververgoeding_per_kwh: number;
 }
 
+/**
+ * Fallback-prijzen (all-in, inclusief distributie + taksen + BTW).
+ * Referentie: CREG/VREG gemiddelden Q1 2026.
+ * In productie wordt dit overschreven door getActueleEnergieprijzen().
+ */
 export const DEFAULT_ENERGIEPRIJZEN: EnergiePrijzenSnapshot = {
-  elektriciteit_per_kwh: 0.35,
-  gas_per_kwh: 0.11,
-  stookolie_per_liter: 1.05,
+  elektriciteit_per_kwh: 0.32,   // Capaciteitstarief dagprijs
+  gas_per_kwh: 0.105,            // All-in 2026
+  stookolie_per_liter: 0.98,
   terugleververgoeding_per_kwh: 0.04,
 };
 
@@ -32,6 +39,7 @@ export interface BesparingInput {
   prijzen?: EnergiePrijzenSnapshot;
   eigen_inbreng: number;
   jaarlijkse_prijsstijging?: number;
+  premies?: PremiesOverzicht;
 }
 
 export function berekenTotaleBesparing(
@@ -82,7 +90,21 @@ export function berekenTotaleBesparing(
       (pvBesparing?.totaal_besparing ?? 0) - zonderBatterij.totaal_besparing;
   }
 
-  const totaal = jaarlijksWP + jaarlijksPV;
+  // Per-ingreep breakdown (nieuw, inclusief isolatie)
+  const perIngreep = input.premies
+    ? bouwIngrepen({
+        extractie: input.extractie,
+        parameters: input.parameters,
+        premies: input.premies,
+        prijzen,
+      })
+    : null;
+
+  // Totale besparing: gebruik per-ingreep som als beschikbaar (inclusief isolatie),
+  // anders fallback op oude 3-lijnen-aggregatie.
+  const totaal = perIngreep
+    ? perIngreep.totaal_besparing_euro
+    : jaarlijksWP + jaarlijksPV;
 
   const { jaren, terugverdientijd_jaar } = bouwProjectie10j({
     basis_jaarlijkse_besparing: totaal,
@@ -100,5 +122,14 @@ export function berekenTotaleBesparing(
     projectie_10j: jaren,
     gebruikte_energieprijzen: prijzen,
     jaarlijkse_prijsstijging: input.jaarlijkse_prijsstijging ?? 0.03,
+    ingrepen: perIngreep?.ingrepen,
+    maandelijkse_besparing_gas_euro: perIngreep?.maandelijks_gas_euro,
+    maandelijkse_besparing_elek_euro: perIngreep?.maandelijks_elek_euro,
+    maandelijkse_besparing_totaal_euro: perIngreep?.maandelijks_totaal_euro,
+    co2_reductie_kg_jaar: perIngreep?.co2_reductie_kg_jaar,
+    epc_label_voor: perIngreep?.epc_label_voor,
+    epc_label_verwacht: perIngreep?.epc_label_verwacht,
+    epc_kwh_m2_voor: perIngreep?.epc_kwh_m2_voor,
+    epc_kwh_m2_na: perIngreep?.epc_kwh_m2_na,
   };
 }

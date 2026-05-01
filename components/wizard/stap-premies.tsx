@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,7 @@ const LABELS: Record<keyof Omit<PremiesOverzicht, "totaal">, string> = {
 };
 
 export function StapPremies({ dossier, onNext }: { dossier: any; onNext: () => void }) {
+  const router = useRouter();
   const bestaand = dossier.premie?.[0];
   const [premies, setPremies] = useState<PremiesOverzicht | null>(
     bestaand?.premies_jsonb ?? null,
@@ -38,6 +40,7 @@ export function StapPremies({ dossier, onNext }: { dossier: any; onNext: () => v
       if (!res.ok) throw new Error(await res.text());
       const p = (await res.json()) as PremiesOverzicht;
       setPremies(p);
+      router.refresh(); // refetch dossier zodat Lening/Besparing de premies zien
       toast({ title: "Premies berekend", variant: "success" });
     } catch (err) {
       toast({

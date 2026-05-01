@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-// pdf-parse v2 exports `pdf` (named). In CommonJS interop we use require.
+// pdf-parse v2: class-based API
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse: (buf: Buffer) => Promise<{ text: string }> = require("pdf-parse");
+const { PDFParse } = require("pdf-parse") as {
+  PDFParse: new (opts: { data: Uint8Array }) => {
+    getText(): Promise<{ text: string }>;
+    destroy(): Promise<void>;
+  };
+};
 import { createAdminSupabaseClient } from "@/lib/supabase/server";
 import { extractOfferte } from "@/lib/claude/extract-offerte";
 import { validateExtractie } from "@/lib/claude/validate";
@@ -39,9 +44,15 @@ export async function POST(
     return NextResponse.json({ error: "PDF niet vindbaar" }, { status: 404 });
   }
 
-  const buffer = Buffer.from(await pdfBlob.arrayBuffer());
-  const parsed = await pdfParse(buffer);
-  const pdfText = parsed.text;
+  const buffer = new Uint8Array(await pdfBlob.arrayBuffer());
+  const parser = new PDFParse({ data: buffer });
+  let pdfText = "";
+  try {
+    const parsed = await parser.getText();
+    pdfText = parsed.text;
+  } finally {
+    await parser.destroy();
+  }
 
   // Extractie via Claude
   const { data: extractie } = await extractOfferte(pdfText);

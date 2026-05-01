@@ -18,31 +18,74 @@ export async function POST(
   const body = (await req.json()) as { type: "bank" | "klant" };
   const supabase = createAdminSupabaseClient();
 
-  const { data: d } = await supabase
+  const dres = await supabase
     .from("dossiers")
-    .select(
-      `*, klant:klanten(*),
-       extractie:offerte_extracties(*),
-       premie:premie_simulaties(*),
-       lening:lening_simulaties(*),
-       besparing:besparing_simulaties(*)`,
-    )
+    .select("id, verkoper_id, klant_id, offerte_referentie, offerte_datum")
     .eq("id", params.id)
     .single();
-
+  const d = dres.data;
   if (!d || d.verkoper_id !== userId) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 
-  const klant = d.klant as any;
-  const extractie = (d.extractie as any)?.[0]?.gestructureerde_data;
-  const premies = (d.premie as any)?.[0]?.premies_jsonb;
-  const leningRow = (d.lening as any)?.[0];
-  const besparingRow = (d.besparing as any)?.[0];
+  const [klantRes, extractieRes, premieRes, leningRes, besparingRes, paramsRes] =
+    await Promise.all([
+      supabase.from("klanten").select("*").eq("id", d.klant_id).maybeSingle(),
+      supabase
+        .from("offerte_extracties")
+        .select("*")
+        .eq("dossier_id", params.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("premie_simulaties")
+        .select("*")
+        .eq("dossier_id", params.id)
+        .maybeSingle(),
+      supabase
+        .from("lening_simulaties")
+        .select("*")
+        .eq("dossier_id", params.id)
+        .maybeSingle(),
+      supabase
+        .from("besparing_simulaties")
+        .select("*")
+        .eq("dossier_id", params.id)
+        .maybeSingle(),
+      supabase
+        .from("klant_parameters")
+        .select("*")
+        .eq("dossier_id", params.id)
+        .maybeSingle(),
+    ]);
+
+  const klant = klantRes.data;
+  const extractie = extractieRes.data?.gestructureerde_data;
+  const premies = premieRes.data?.premies_jsonb;
+  const leningRow = leningRes.data;
+  const besparingRow = besparingRes.data;
+  const klantParams = paramsRes.data
+    ? {
+        inkomenscategorie: paramsRes.data.inkomenscategorie,
+        gezamenlijk_inkomen: paramsRes.data.gezamenlijk_inkomen,
+        burgerlijke_staat: paramsRes.data.burgerlijke_staat,
+        personen_ten_laste: paramsRes.data.personen_ten_laste,
+        epc_label_voor: paramsRes.data.epc_label_voor,
+        epc_label_verwacht: paramsRes.data.epc_label_verwacht,
+        woning_ouderdom: paramsRes.data.woning_ouderdom,
+      }
+    : undefined;
 
   if (!extractie || !premies || !leningRow || !besparingRow) {
     return NextResponse.json(
-      { error: "dossier nog niet volledig" },
+      {
+        error: "dossier nog niet volledig",
+        heeft_extractie: !!extractie,
+        heeft_premies: !!premies,
+        heeft_lening: !!leningRow,
+        heeft_besparing: !!besparingRow,
+      },
       { status: 400 },
     );
   }
@@ -79,6 +122,7 @@ export async function POST(
           premies,
           lening: lening as any,
           besparing,
+          klantParams,
         })
       : React.createElement(KlantDossier, {
           klant,

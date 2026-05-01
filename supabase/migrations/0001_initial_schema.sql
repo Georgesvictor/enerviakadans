@@ -8,8 +8,9 @@
 create extension if not exists "pgcrypto";
 
 -- 1. USERS ------------------------------------------------------------
+-- id is TEXT omdat Clerk userIds formaat "user_XXXXXXXX" hebben (geen UUID).
 create table if not exists public.users (
-  id uuid primary key,                    -- Clerk user id (string uuid)
+  id text primary key,                    -- Clerk user id (bv. "user_2abc...")
   email text unique not null,
   rol text not null default 'verkoper' check (rol in ('verkoper', 'admin')),
   teamleader_user_id text,
@@ -28,7 +29,7 @@ create table if not exists public.klanten (
   postcode text,
   gemeente text,
   geboortedatum date,
-  created_by uuid references public.users(id) on delete set null,
+  created_by text references public.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -38,7 +39,7 @@ create index if not exists klanten_created_by_idx on public.klanten(created_by);
 create table if not exists public.dossiers (
   id uuid primary key default gen_random_uuid(),
   klant_id uuid references public.klanten(id) on delete cascade,
-  verkoper_id uuid references public.users(id) on delete set null,
+  verkoper_id text references public.users(id) on delete set null,
   teamleader_quotation_id text,
   offerte_pdf_url text,
   offerte_referentie text,
@@ -159,7 +160,7 @@ create table if not exists public.gegenereerde_pdfs (
   dossier_id uuid references public.dossiers(id) on delete cascade,
   type text not null check (type in ('bank', 'klant')),
   pdf_url text not null,
-  gegenereerd_door uuid references public.users(id) on delete set null,
+  gegenereerd_door text references public.users(id) on delete set null,
   parameters_snapshot jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
@@ -169,7 +170,7 @@ create index if not exists pdfs_dossier_idx on public.gegenereerde_pdfs(dossier_
 create table if not exists public.audit_log (
   id uuid primary key default gen_random_uuid(),
   dossier_id uuid references public.dossiers(id) on delete set null,
-  user_id uuid references public.users(id) on delete set null,
+  user_id text references public.users(id) on delete set null,
   actie text not null,
   metadata jsonb default '{}'::jsonb,
   ip_address text,
@@ -181,7 +182,7 @@ create index if not exists audit_created_idx on public.audit_log(created_at desc
 
 -- 12. TEAMLEADER_TOKENS -----------------------------------------------
 create table if not exists public.teamleader_tokens (
-  user_id uuid primary key references public.users(id) on delete cascade,
+  user_id text primary key references public.users(id) on delete cascade,
   access_token text not null,
   refresh_token text not null,
   expires_at timestamptz not null,
@@ -201,7 +202,7 @@ create table if not exists public.settings (
   wp_cop_default numeric(3,2) not null default 3.20,
   jaarlijkse_prijsstijging numeric(4,3) not null default 0.03,
   updated_at timestamptz not null default now(),
-  updated_by uuid references public.users(id) on delete set null
+  updated_by text references public.users(id) on delete set null
 );
 insert into public.settings (id) values (1) on conflict (id) do nothing;
 
@@ -240,12 +241,13 @@ alter table public.audit_log enable row level security;
 alter table public.teamleader_tokens enable row level security;
 alter table public.settings enable row level security;
 
--- Helper: is admin?
+-- Helper: is admin? Clerk zet user-id in auth.jwt() ->> 'sub' als string;
+-- vergelijken we als text met users.id (users.id is uuid, dus cast beide naar text).
 create or replace function public.is_admin() returns boolean
   language sql stable as $$
     select exists (
       select 1 from public.users
-      where id = auth.jwt() ->> 'sub'::uuid
+      where id = coalesce(auth.jwt() ->> 'sub', '')
         and rol = 'admin'
     );
   $$;
@@ -253,18 +255,18 @@ create or replace function public.is_admin() returns boolean
 -- RLS policies - users zien hun eigen rij (via Clerk user id als auth.jwt.sub)
 drop policy if exists users_self on public.users;
 create policy users_self on public.users for all
-  using (id::text = coalesce(auth.jwt() ->> 'sub', ''))
-  with check (id::text = coalesce(auth.jwt() ->> 'sub', ''));
+  using (id = coalesce(auth.jwt() ->> 'sub', ''))
+  with check (id = coalesce(auth.jwt() ->> 'sub', ''));
 
 -- Klanten: eigen + admin
 drop policy if exists klanten_own on public.klanten;
 create policy klanten_own on public.klanten for all
   using (
-    created_by::text = coalesce(auth.jwt() ->> 'sub', '')
+    created_by = coalesce(auth.jwt() ->> 'sub', '')
     or public.is_admin()
   )
   with check (
-    created_by::text = coalesce(auth.jwt() ->> 'sub', '')
+    created_by = coalesce(auth.jwt() ->> 'sub', '')
     or public.is_admin()
   );
 
@@ -272,11 +274,11 @@ create policy klanten_own on public.klanten for all
 drop policy if exists dossiers_own on public.dossiers;
 create policy dossiers_own on public.dossiers for all
   using (
-    verkoper_id::text = coalesce(auth.jwt() ->> 'sub', '')
+    verkoper_id = coalesce(auth.jwt() ->> 'sub', '')
     or public.is_admin()
   )
   with check (
-    verkoper_id::text = coalesce(auth.jwt() ->> 'sub', '')
+    verkoper_id = coalesce(auth.jwt() ->> 'sub', '')
     or public.is_admin()
   );
 
@@ -287,7 +289,7 @@ create or replace function public.can_access_dossier(d_id uuid) returns boolean
       select 1 from public.dossiers
       where id = d_id
         and (
-          verkoper_id::text = coalesce(auth.jwt() ->> 'sub', '')
+          verkoper_id = coalesce(auth.jwt() ->> 'sub', '')
           or public.is_admin()
         )
     );
@@ -329,7 +331,7 @@ create policy audit_insert on public.audit_log for insert with check (true);
 drop policy if exists audit_select on public.audit_log;
 create policy audit_select on public.audit_log for select
   using (
-    user_id::text = coalesce(auth.jwt() ->> 'sub', '')
+    user_id = coalesce(auth.jwt() ->> 'sub', '')
     or public.is_admin()
   );
 
@@ -350,5 +352,5 @@ create policy settings_admin on public.settings for all
 -- Teamleader tokens: eigen
 drop policy if exists teamleader_tokens_self on public.teamleader_tokens;
 create policy teamleader_tokens_self on public.teamleader_tokens for all
-  using (user_id::text = coalesce(auth.jwt() ->> 'sub', ''))
-  with check (user_id::text = coalesce(auth.jwt() ->> 'sub', ''));
+  using (user_id = coalesce(auth.jwt() ->> 'sub', ''))
+  with check (user_id = coalesce(auth.jwt() ->> 'sub', ''));

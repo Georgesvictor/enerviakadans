@@ -1,14 +1,15 @@
 import { SignIn } from "@clerk/nextjs";
+import Link from "next/link";
 
 export default function Page() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-enervia-50 p-6">
-      <div className="mb-8 text-center">
-        <h1 className="text-3xl font-bold text-enervia-500">Enervia Simulatie</h1>
-        <p className="text-sm text-muted-foreground mt-2">
-          Log in met je Enervia Google-account
-        </p>
-      </div>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-enervia-50 to-white p-6">
+      <Link
+        href="/"
+        className="text-2xl font-bold text-enervia-700 tracking-wider mb-8"
+      >
+        KADANS
+      </Link>
       <SignIn
         appearance={{
           variables: {
@@ -17,6 +18,12 @@ export default function Page() {
           },
         }}
       />
+      <p className="text-xs text-muted-foreground mt-6">
+        Nog geen account?{" "}
+        <Link href="/sign-up" className="text-enervia-600 hover:underline">
+          Gratis starten
+        </Link>
+      </p>
     </div>
   );
 }

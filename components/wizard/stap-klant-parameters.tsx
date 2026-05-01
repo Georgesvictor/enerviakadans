@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,7 @@ export function StapKlantParameters({
   dossier: any;
   onNext: () => void;
 }) {
+  const router = useRouter();
   const existing = (dossier.parameters?.[0] as KlantParameters) ?? null;
   const [form, setForm] = useState<KlantParameters>(
     existing ?? {
@@ -62,6 +64,7 @@ export function StapKlantParameters({
         body: JSON.stringify({ ...form, inkomenscategorie: autoCat }),
       });
       if (!res.ok) throw new Error(await res.text());
+      router.refresh();
       toast({ title: "Klantparameters opgeslagen", variant: "success" });
       onNext();
     } catch (err) {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/server";
+import { requireTenant } from "@/lib/tenancy/context";
 import {
   downloadQuotationPdf,
   getQuotation,
@@ -18,8 +18,15 @@ import { randomUUID } from "crypto";
  * Maakt dossier aan, upload PDF naar storage, extraheert (async trigger).
  */
 export async function POST(req: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  let tenantId: string;
+  let userId: string;
+  try {
+    const ctx = await requireTenant();
+    tenantId = ctx.tenantId;
+    userId = ctx.userId;
+  } catch {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
 
   const supabase = createAdminSupabaseClient();
   const contentType = req.headers.get("content-type") ?? "";
@@ -42,6 +49,7 @@ export async function POST(req: NextRequest) {
     const { data: klant } = await supabase
       .from("klanten")
       .insert({
+        tenant_id: tenantId,
         voornaam: "Onbekend",
         achternaam: "(in te vullen)",
         created_by: userId,
@@ -78,6 +86,7 @@ export async function POST(req: NextRequest) {
         const { data: klant } = await supabase
           .from("klanten")
           .insert({
+            tenant_id: tenantId,
             teamleader_contact_id: q.data.contact.id,
             voornaam: c.first_name ?? "",
             achternaam: c.last_name ?? "",
@@ -112,6 +121,7 @@ export async function POST(req: NextRequest) {
   const { data: dossier, error } = await supabase
     .from("dossiers")
     .insert({
+      tenant_id: tenantId,
       klant_id: klantId,
       verkoper_id: userId,
       teamleader_quotation_id: tlQuotationId,

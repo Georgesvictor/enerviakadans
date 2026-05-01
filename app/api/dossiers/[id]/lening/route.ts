@@ -25,16 +25,24 @@ export async function POST(
     rentevoet?: number;
   };
 
-  const { data: dossier } = await supabase
-    .from("dossiers")
-    .select(`id, verkoper_id, parameters:klant_parameters(*)`)
-    .eq("id", params.id)
-    .single();
+  const [dossierRes, paramsRes] = await Promise.all([
+    supabase.from("dossiers").select("id, verkoper_id").eq("id", params.id).single(),
+    supabase
+      .from("klant_parameters")
+      .select("*")
+      .eq("dossier_id", params.id)
+      .maybeSingle(),
+  ]);
+
+  const dossier = dossierRes.data;
   if (!dossier || dossier.verkoper_id !== userId) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 
-  const kparams = (dossier.parameters as any)?.[0] as KlantParameters;
+  const kparams = paramsRes.data as KlantParameters | undefined;
+  if (!kparams) {
+    return NextResponse.json({ error: "parameters ontbreken" }, { status: 400 });
+  }
   const mvl = checkMVLGeschiktheid(kparams);
 
   let rente = body.rentevoet ?? COMMERCIEEL_DEFAULT_RENTE;

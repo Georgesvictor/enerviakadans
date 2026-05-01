@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +18,7 @@ export function StapExtractieReview({
   dossier: any;
   onNext: () => void;
 }) {
+  const router = useRouter();
   const extractie = dossier.extractie?.[0];
   const [busy, setBusy] = useState(false);
   const [data, setData] = useState<OfferteExtractie | null>(
@@ -34,6 +36,7 @@ export function StapExtractieReview({
       if (!res.ok) throw new Error(await res.text());
       const json = await res.json();
       setData(json.extractie);
+      router.refresh();
       toast({
         title: "Extractie klaar",
         description: `Score: ${(json.validatie.score * 100).toFixed(0)}%`,

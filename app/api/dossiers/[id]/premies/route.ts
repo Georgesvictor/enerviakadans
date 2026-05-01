@@ -12,21 +12,39 @@ export async function POST(
   if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const supabase = createAdminSupabaseClient();
 
-  const { data: dossier } = await supabase
-    .from("dossiers")
-    .select(`id, verkoper_id, extractie:offerte_extracties(gestructureerde_data), parameters:klant_parameters(*)`)
-    .eq("id", params.id)
-    .single();
+  // Query dossier, extractie en parameters apart → vermijdt Supabase-
+  // embedded-relation ambiguïteit (array vs object).
+  const [dossierRes, extractieRes, paramsRes] = await Promise.all([
+    supabase.from("dossiers").select("id, verkoper_id").eq("id", params.id).single(),
+    supabase
+      .from("offerte_extracties")
+      .select("gestructureerde_data")
+      .eq("dossier_id", params.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("klant_parameters")
+      .select("*")
+      .eq("dossier_id", params.id)
+      .maybeSingle(),
+  ]);
 
+  const dossier = dossierRes.data;
   if (!dossier || dossier.verkoper_id !== userId) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 
-  const extractie = (dossier.extractie as any)?.[0]?.gestructureerde_data as OfferteExtractie;
-  const kparams = (dossier.parameters as any)?.[0] as KlantParameters;
+  const extractie = extractieRes.data?.gestructureerde_data as OfferteExtractie | undefined;
+  const kparams = paramsRes.data as KlantParameters | undefined;
+
   if (!extractie || !kparams) {
     return NextResponse.json(
-      { error: "extractie of parameters ontbreken" },
+      {
+        error: "extractie of parameters ontbreken",
+        heeft_extractie: !!extractie,
+        heeft_parameters: !!kparams,
+      },
       { status: 400 },
     );
   }

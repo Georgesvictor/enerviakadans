@@ -33,6 +33,10 @@ export const DEFAULT_COP: Record<WarmtepompType, number> = {
   hybride: 3.5,
 };
 
+export function defaultCOP(type: WarmtepompType): number {
+  return DEFAULT_COP[type];
+}
+
 const KWH_PER_LITER_STOOKOLIE = 10;
 
 export function berekenWarmtepompBesparing(
