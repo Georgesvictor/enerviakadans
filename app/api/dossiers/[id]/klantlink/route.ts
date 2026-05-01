@@ -37,7 +37,25 @@ export async function POST(
     metadata: { expires },
   });
 
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://simulatie.enervia.be";
+  // Bepaal base-URL automatisch:
+  //  1. Request origin (werkt voor zowel preview als productie zonder env var)
+  //  2. VERCEL_URL (auto-set door Vercel op deployment)
+  //  3. Optionele override via NEXT_PUBLIC_APP_URL
+  //  4. Fallback simulatie.enervia.be
+  const reqOrigin =
+    req.headers.get("origin") ??
+    (req.headers.get("host")
+      ? `https://${req.headers.get("host")}`
+      : null);
+  const vercelUrl = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : null;
+  const base =
+    reqOrigin ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    vercelUrl ??
+    "https://simulatie.enervia.be";
+
   return NextResponse.json({
     url: `${base}/klant/${token}`,
     expires_at: expires,
