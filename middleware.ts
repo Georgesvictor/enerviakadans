@@ -27,6 +27,7 @@ const isPublic = createRouteMatcher([
   "/api/tenants/toetreden",
   "/api/dev-login",
   "/api/debug-auth",
+  "/api/health",
 ]);
 
 /**
